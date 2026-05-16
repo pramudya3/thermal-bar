@@ -1,0 +1,15 @@
+# Build Artifacts
+build/
+*.app/
+*.zip
+ThermalBar.app/
+ThermalBar.zip
+
+# OS X
+.DS_Store
+
+# Swift / Xcode
+.build/
+*.xcodeproj/
+*.xcworkspace/
+DerivedData/
