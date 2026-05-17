@@ -8,11 +8,11 @@ final class HIDThermalService {
     // MARK: - C function types (loaded via dlopen)
     private typealias CreateFn   = @convention(c) (CFAllocator?) -> OpaquePointer?
     private typealias SetMatchFn = @convention(c) (OpaquePointer, CFDictionary) -> Void
-    private typealias CopySvcsFn = @convention(c) (OpaquePointer) -> CFArray?
-    private typealias CopyEvtFn  = @convention(c) (OpaquePointer, Int64, Int32, Int64) -> OpaquePointer?
+    private typealias CopySvcsFn = @convention(c) (OpaquePointer) -> Unmanaged<CFArray>?
+    private typealias CopyEvtFn  = @convention(c) (OpaquePointer, Int64, Int32, Int64) -> Unmanaged<CFTypeRef>?
     private typealias GetFloatFn = @convention(c) (OpaquePointer, Int32) -> Double
     // Return type is CFTypeRef (a raw pointer), we handle retain manually
-    private typealias CopyPropFn = @convention(c) (OpaquePointer, CFString) -> UnsafeRawPointer?
+    private typealias CopyPropFn = @convention(c) (OpaquePointer, CFString) -> Unmanaged<CFTypeRef>?
 
     private static let kEvtTypeTemperature: Int64 = 15
     private static let kFieldTempLevel: Int32      = Int32(15 << 16) | 0
@@ -63,7 +63,9 @@ final class HIDThermalService {
     // MARK: - Public API
 
     func allReadings() -> [(name: String, temp: Double)] {
-        guard let svcs = copySvcsFn(client) else { return [] }
+        guard let svcsUnmanaged = copySvcsFn(client) else { return [] }
+        let svcs = svcsUnmanaged.takeRetainedValue() // This handles the +1 retain count
+        
         var results: [(name: String, temp: Double)] = []
         let count = CFArrayGetCount(svcs)
         for i in 0 ..< count {
@@ -72,16 +74,18 @@ final class HIDThermalService {
 
             // Safe property read — treat return as raw CFTypeRef
             let name: String
-            if let propRaw = copyPropFn(svc, "Product" as CFString) {
+            if let propUnmanaged = copyPropFn(svc, "Product" as CFString) {
                 // IOHIDServiceClientCopyProperty returns +1 retained
-                let cfObj = Unmanaged<CFTypeRef>.fromOpaque(propRaw).takeRetainedValue()
+                let cfObj = propUnmanaged.takeRetainedValue()
                 name = (cfObj as? String) ?? "Sensor"
             } else {
                 name = "Sensor"
             }
 
-            guard let evtPtr = copyEvtFn(svc, Self.kEvtTypeTemperature, 0, 0) else { continue }
+            guard let evtUnmanaged = copyEvtFn(svc, Self.kEvtTypeTemperature, 0, 0) else { continue }
+            let evtPtr = OpaquePointer(evtUnmanaged.toOpaque())
             let temp = getFloatFn(evtPtr, Self.kFieldTempLevel)
+            evtUnmanaged.release() // Properly release the +1 retained CFTypeRef
 
             if temp > 0 && temp < 120 {
                 results.append((name: name, temp: temp))
