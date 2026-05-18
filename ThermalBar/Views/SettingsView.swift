@@ -7,8 +7,7 @@ struct SettingsView: View {
     @State private var launchAtLogin = false
     
     let intervals = [1.0, 2.0, 5.0, 10.0]
-    let displayModes = ["CPU & Battery", "CPU, GPU & Battery", "CPU Only", "GPU Only", "Battery Only"]
-    let tempTypes = ["Average CPU", "GPU", "Battery"]
+    let metricTypes = ["Average CPU", "GPU", "Battery", "CPU Usage", "GPU Usage", "RAM Usage"]
     
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -16,60 +15,97 @@ struct SettingsView: View {
                 .font(.title2)
                 .fontWeight(.bold)
             
-            // Menu Bar Content
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Menu Bar Content")
+            // ── TEMPERATURE SECTION ──
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Temperature Section")
                     .font(.headline)
+                    .foregroundColor(.secondary)
                 
-                HStack {
-                    Toggle("Temperature", isOn: $viewModel.showFirstTemp)
-                    Spacer()
-                    Picker("", selection: $viewModel.firstTempType) {
-                        ForEach(tempTypes, id: \.self) { type in Text(type).tag(type) }
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Toggle("Primary Metric", isOn: $viewModel.showFirstTemp)
+                        Spacer()
+                        Picker("", selection: $viewModel.firstTempType) {
+                            ForEach(metricTypes, id: \.self) { type in Text(type).tag(type) }
+                        }
+                        .labelsHidden()
+                        .disabled(!viewModel.showFirstTemp)
                     }
-                    .labelsHidden()
-                    .disabled(!viewModel.showFirstTemp)
-                }
-                
-                HStack {
-                    Toggle("Second temperature", isOn: $viewModel.showSecondTemp)
-                    Spacer()
-                    Picker("", selection: $viewModel.secondTempType) {
-                        ForEach(tempTypes, id: \.self) { type in Text(type).tag(type) }
+                    
+                    HStack {
+                        Toggle("Secondary Metric", isOn: $viewModel.showSecondTemp)
+                        Spacer()
+                        Picker("", selection: $viewModel.secondTempType) {
+                            ForEach(metricTypes, id: \.self) { type in Text(type).tag(type) }
+                        }
+                        .labelsHidden()
+                        .disabled(!viewModel.showSecondTemp)
                     }
-                    .labelsHidden()
-                    .disabled(!viewModel.showSecondTemp)
-                }
-                
-                HStack {
-                    Toggle("Fan RPM", isOn: .constant(false))
-                        .disabled(true)
-                    Spacer()
-                    Picker("", selection: .constant("Average RPM")) {
-                        Text("Average RPM").tag("Average RPM")
+                    
+                    HStack(spacing: 16) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Menu Bar Text Order")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(.secondary)
+                            Picker("", selection: $viewModel.menuBarTextOrder) {
+                                Text("Horizontal").tag("Horizontal")
+                                Text("Vertical").tag("Vertical")
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.segmented)
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Dashboard Layout")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(.secondary)
+                            Picker("", selection: $viewModel.temperatureLayout) {
+                                Text("Horizontal").tag("Horizontal")
+                                Text("Vertical").tag("Vertical")
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.segmented)
+                        }
                     }
-                    .labelsHidden()
-                    .disabled(true)
                 }
+                .padding(.leading, 8)
             }
             
-            // Menu Bar Text Order
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Menu Bar Text Order")
+            Divider()
+            
+            // ── SYSTEM USAGE SECTION ──
+            VStack(alignment: .leading, spacing: 10) {
+                Text("System Usage Section")
                     .font(.headline)
+                    .foregroundColor(.secondary)
                 
-                Picker("", selection: $viewModel.menuBarTextOrder) {
-                    Text("Horizontal").tag("Horizontal")
-                    Text("Vertical").tag("Vertical")
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("Show CPU Usage in Menu Bar", isOn: $viewModel.showCpuMenuBar)
+                    Toggle("Show RAM Usage in Menu Bar", isOn: $viewModel.showRamMenuBar)
+                    Toggle("Show GPU Usage in Menu Bar", isOn: $viewModel.showGpuMenuBar)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Usage Layout (Menu Bar & Dashboard)")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        Picker("", selection: $viewModel.systemUsageLayout) {
+                            Text("Horizontal").tag("Horizontal")
+                            Text("Vertical").tag("Vertical")
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                    }
                 }
-                .labelsHidden()
-                .pickerStyle(.segmented)
+                .padding(.leading, 8)
             }
             
-            // Refresh Interval & Other
-            VStack(alignment: .leading, spacing: 8) {
+            Divider()
+            
+            // ── REFRESH & GENERAL ──
+            VStack(alignment: .leading, spacing: 10) {
                 Text("Refresh Interval")
                     .font(.headline)
+                    .foregroundColor(.secondary)
                 
                 Picker("", selection: $viewModel.refreshInterval) {
                     ForEach(intervals, id: \.self) { interval in
@@ -81,12 +117,14 @@ struct SettingsView: View {
                 .onChange(of: viewModel.refreshInterval) { _, _ in
                     viewModel.startPolling()
                 }
+                .padding(.leading, 8)
             }
             
             Toggle("Start at Login", isOn: $launchAtLogin)
                 .onChange(of: launchAtLogin) { _, newValue in
                     toggleLaunchAtLogin(newValue)
                 }
+                .padding(.leading, 8)
             
             Divider()
             

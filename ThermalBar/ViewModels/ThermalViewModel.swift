@@ -27,43 +27,123 @@ class ThermalViewModel: ObservableObject {
     @Published var cpuReadings: [SensorReading] = []
     @Published var gpuReadings: [SensorReading] = []
     @Published var batteryReadings: [SensorReading] = []
-
-    // Preferences
-    @AppStorage("refreshInterval") var refreshInterval: Double = 0.5 // faster polling for real-time updates
-    @AppStorage("highTempThreshold") var highTempThreshold: Double = 85.0
-
     
+    @Published var cpuUsage: UsageReading?
+    @Published var gpuUsage: UsageReading?
+    @Published var memoryUsage: UsageReading?
+
+    // Preferences manually synced with UserDefaults to avoid AppStorage memory/offset compiler bugs
+    @Published var refreshInterval: Double {
+        didSet {
+            UserDefaults.standard.set(refreshInterval, forKey: "refreshInterval")
+        }
+    }
+    @Published var highTempThreshold: Double {
+        didSet {
+            UserDefaults.standard.set(highTempThreshold, forKey: "highTempThreshold")
+        }
+    }
+
     // Menu Bar Settings
-    @AppStorage("showFirstTemp") var showFirstTemp: Bool = true
-    @AppStorage("firstTempType") var firstTempType: String = "Average CPU"
-    @AppStorage("showSecondTemp") var showSecondTemp: Bool = true
-    @AppStorage("secondTempType") var secondTempType: String = "Battery"
-    @AppStorage("menuBarTextOrder") var menuBarTextOrder: String = "Vertical"
+    @Published var showFirstTemp: Bool {
+        didSet {
+            UserDefaults.standard.set(showFirstTemp, forKey: "showFirstTemp")
+        }
+    }
+    @Published var firstTempType: String {
+        didSet {
+            UserDefaults.standard.set(firstTempType, forKey: "firstTempType")
+        }
+    }
+    @Published var showSecondTemp: Bool {
+        didSet {
+            UserDefaults.standard.set(showSecondTemp, forKey: "showSecondTemp")
+        }
+    }
+    @Published var secondTempType: String {
+        didSet {
+            UserDefaults.standard.set(secondTempType, forKey: "secondTempType")
+        }
+    }
+    @Published var menuBarTextOrder: String {
+        didSet {
+            UserDefaults.standard.set(menuBarTextOrder, forKey: "menuBarTextOrder")
+        }
+    }
+    @Published var showMenuBarIcon: Bool {
+        didSet {
+            UserDefaults.standard.set(showMenuBarIcon, forKey: "showMenuBarIcon")
+        }
+    }
+    @Published var showCpuMenuBar: Bool {
+        didSet {
+            UserDefaults.standard.set(showCpuMenuBar, forKey: "showCpuMenuBar")
+        }
+    }
+    @Published var showRamMenuBar: Bool {
+        didSet {
+            UserDefaults.standard.set(showRamMenuBar, forKey: "showRamMenuBar")
+        }
+    }
+    @Published var showGpuMenuBar: Bool {
+        didSet {
+            UserDefaults.standard.set(showGpuMenuBar, forKey: "showGpuMenuBar")
+        }
+    }
+    @Published var systemUsageLayout: String {
+        didSet {
+            UserDefaults.standard.set(systemUsageLayout, forKey: "systemUsageLayout")
+        }
+    }
+    @Published var temperatureLayout: String {
+        didSet {
+            UserDefaults.standard.set(temperatureLayout, forKey: "temperatureLayout")
+        }
+    }
 
     // Services
     private let hidService = HIDThermalService()
     private let batteryService = BatteryService()
     private let smcService = SMCService()
+    private let usageService = UsageService()
     private let notificationService = NotificationService.shared
     private var timer: Timer?
     private var lastThermalState: ProcessInfo.ThermalState = .nominal
 
     init() {
+        let ud = UserDefaults.standard
+        self.refreshInterval = ud.object(forKey: "refreshInterval") == nil ? 0.5 : ud.double(forKey: "refreshInterval")
+        self.highTempThreshold = ud.object(forKey: "highTempThreshold") == nil ? 85.0 : ud.double(forKey: "highTempThreshold")
+        
+        self.showFirstTemp = ud.object(forKey: "showFirstTemp") == nil ? true : ud.bool(forKey: "showFirstTemp")
+        self.firstTempType = ud.string(forKey: "firstTempType") ?? "Average CPU"
+        self.showSecondTemp = ud.object(forKey: "showSecondTemp") == nil ? true : ud.bool(forKey: "showSecondTemp")
+        self.secondTempType = ud.string(forKey: "secondTempType") ?? "Battery"
+        self.menuBarTextOrder = ud.string(forKey: "menuBarTextOrder") ?? "Vertical"
+        self.showMenuBarIcon = true
+        
+        self.showCpuMenuBar = ud.bool(forKey: "showCpuMenuBar")
+        self.showRamMenuBar = ud.bool(forKey: "showRamMenuBar")
+        self.showGpuMenuBar = ud.bool(forKey: "showGpuMenuBar")
+        
+        self.systemUsageLayout = ud.string(forKey: "systemUsageLayout") ?? "Vertical"
+        self.temperatureLayout = ud.string(forKey: "temperatureLayout") ?? "Vertical"
+        
         updateSensors()
         startPolling()
         setupWakeNotification()
     }
 
+    private let pollingQueue = DispatchQueue(label: "com.antigravity.ThermalBar.polling", qos: .userInitiated)
     private var sensorTimer: DispatchSourceTimer?
 
     func startPolling() {
         // Cancel any existing timer
         sensorTimer?.cancel()
-        sensorTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.main)
+        sensorTimer = DispatchSource.makeTimerSource(queue: pollingQueue)
         sensorTimer?.schedule(deadline: .now(), repeating: refreshInterval)
         sensorTimer?.setEventHandler { [weak self] in
             self?.updateSensors()
-            self?.checkAlerts()
         }
         sensorTimer?.resume()
     }
@@ -74,7 +154,6 @@ class ThermalViewModel: ObservableObject {
             forName: NSWorkspace.didWakeNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
-            self?.updateSensors()
             self?.startPolling()
         }
     }
@@ -110,17 +189,38 @@ class ThermalViewModel: ObservableObject {
         
         // Prioritize Performance Core for the menu bar CPU reading
         let smcPcore = smcService.getCPUTemperature()
-        self.cpuTemp = (smcPcore > 0) ? smcPcore : hid.cpuTemperature()
+        let finalCpuTemp = (smcPcore > 0) ? smcPcore : hid.cpuTemperature()
         
-        self.batteryTemp = (smcBattery > 0) ? smcBattery : (gasGaugeReading?.temp ?? battInfo?.temperature ?? hid.batteryTemperature())
+        let finalBatteryTemp = (smcBattery > 0) ? smcBattery : (gasGaugeReading?.temp ?? battInfo?.temperature ?? hid.batteryTemperature())
         // Create a single battery reading for the dashboard using the same real‑time temperature
-        battList = [SensorReading(id: "Battery", label: "Battery", temperature: self.batteryTemp)]
+        battList = [SensorReading(id: "Battery", label: "Battery", temperature: finalBatteryTemp)]
         
-        DispatchQueue.main.async {
+        // Fetch Usage Metrics
+        let cpuPct = usageService.getCPUUsage()
+        let memoryPct = usageService.getMemoryUsage()
+        let gpuPct = usageService.getGPUUsage()
+        
+        let cpuUsageReading = UsageReading(id: "CPUUsage", label: "CPU Usage", usage: cpuPct)
+        let memoryUsageReading = UsageReading(id: "MemUsage", label: "Memory Usage", usage: memoryPct)
+        let gpuUsageReading = UsageReading(id: "GPUUsage", label: "GPU Usage", usage: gpuPct)
+        
+        let sortedCpuList = cpuList.sorted(by: { $0.id < $1.id })
+        let dedupedGpuList = Self.dedupeLabels(gpuList)
+        
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.cpuTemp = finalCpuTemp
+            self.batteryTemp = finalBatteryTemp
             // Disable CPU deduplication to show all core package sensors
-            self.cpuReadings = cpuList.sorted(by: { $0.id < $1.id })
-            self.gpuReadings = Self.dedupeLabels(gpuList)
+            self.cpuReadings = sortedCpuList
+            self.gpuReadings = dedupedGpuList
             self.batteryReadings = battList
+            
+            self.cpuUsage = cpuUsageReading
+            self.memoryUsage = memoryUsageReading
+            self.gpuUsage = gpuUsageReading
+            
+            self.checkAlerts()
         }
     }
 

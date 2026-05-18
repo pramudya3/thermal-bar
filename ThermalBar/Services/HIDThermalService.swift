@@ -24,6 +24,12 @@ final class HIDThermalService {
     private let copyPropFn: CopyPropFn
     private let client: OpaquePointer
 
+    private struct CachedSensor {
+        let service: OpaquePointer
+        let name: String
+    }
+    private var cachedSensors: [CachedSensor] = []
+
     // MARK: - Sensor name substrings
     static let perfCoreSubstrings = ["pACC MTR", "p0 MTR", "p1 MTR"]
     static let effCoreSubstrings  = ["eACC MTR", "e0 MTR", "SOC MTR"]
@@ -58,37 +64,43 @@ final class HIDThermalService {
 
         let match: NSDictionary = ["PrimaryUsagePage": 0xff00, "PrimaryUsage": 0x0005]
         setMatchFn(client, match)
+
+        cacheSensorServices()
     }
 
-    // MARK: - Public API
-
-    func allReadings() -> [(name: String, temp: Double)] {
-        guard let svcsUnmanaged = copySvcsFn(client) else { return [] }
-        let svcs = svcsUnmanaged.takeRetainedValue() // This handles the +1 retain count
-        
-        var results: [(name: String, temp: Double)] = []
+    private func cacheSensorServices() {
+        guard let svcsUnmanaged = copySvcsFn(client) else { return }
+        let svcs = svcsUnmanaged.takeRetainedValue()
         let count = CFArrayGetCount(svcs)
+        
         for i in 0 ..< count {
             guard let raw = CFArrayGetValueAtIndex(svcs, i) else { continue }
             let svc = OpaquePointer(raw)
 
-            // Safe property read — treat return as raw CFTypeRef
             let name: String
             if let propUnmanaged = copyPropFn(svc, "Product" as CFString) {
-                // IOHIDServiceClientCopyProperty returns +1 retained
                 let cfObj = propUnmanaged.takeRetainedValue()
                 name = (cfObj as? String) ?? "Sensor"
             } else {
                 name = "Sensor"
             }
+            
+            cachedSensors.append(CachedSensor(service: svc, name: name))
+        }
+    }
 
-            guard let evtUnmanaged = copyEvtFn(svc, Self.kEvtTypeTemperature, 0, 0) else { continue }
+    // MARK: - Public API
+
+    func allReadings() -> [(name: String, temp: Double)] {
+        var results: [(name: String, temp: Double)] = []
+        for sensor in cachedSensors {
+            guard let evtUnmanaged = copyEvtFn(sensor.service, Self.kEvtTypeTemperature, 0, 0) else { continue }
             let evtPtr = OpaquePointer(evtUnmanaged.toOpaque())
             let temp = getFloatFn(evtPtr, Self.kFieldTempLevel)
             evtUnmanaged.release() // Properly release the +1 retained CFTypeRef
 
             if temp > 0 && temp < 120 {
-                results.append((name: name, temp: temp))
+                results.append((name: sensor.name, temp: temp))
             }
         }
         return results
