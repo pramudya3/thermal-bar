@@ -12,26 +12,27 @@
 | :---: | :---: |
 | ![Dashboard](assets/dashboard.png) | ![Settings](assets/setting.png) |
 
-| Ultra-Low Resource Usage |
-| :---: |
-| ![Memory Usage](assets/memory_usage.png) |
-
 ## ✨ Features
 
-- **Pro-Grade Accuracy**: Prioritizes raw hardware data from the **AppleSMC** (System Management Controller) for Performance Cores and Battery gas gauges.
-- **Pixel-Perfect Menu Bar**: A compact, vertical 2-line display inspired by the best professional monitoring tools (TG Pro style).
-- **Retina-Crisp Rendering**: Custom NSImage rendering engine using integer-aligned coordinates to ensure maximum sharpness on Retina displays.
-- **Detailed Dashboard**: View every individual CPU package sensor, GPU temperatures, and unified battery data in a clean, progress-bar-free interface.
-- **Intelligent Alerts**: Real-time notifications for high-temperature thresholds and thermal throttling states.
-- **Ultra-Lightweight**: Built natively in Swift with zero external dependencies, consuming minimal CPU and RAM (under 20MB in typical use).
-- **Apple Silicon Optimized**: Native performance on M1/M2/M3 chips with zero overhead.
+- **Pro-Grade Thermal Accuracy**: Prioritizes raw hardware data from the **AppleSMC** (System Management Controller) for Performance Cores and Battery gas gauges.
+- **Real-Time System Usage**: Integrated high-efficiency telemetry tracking for overall CPU load, RAM commitment (memory pressure), and GPU core utilization.
+- **Customizable Menu Bar Layouts**:
+  - **Vertical View**: A unified, TG Pro-style stacked vertical bar displaying selected metrics (e.g. CPU, RAM, GPU) compactly in one slot.
+  - **Horizontal View**: Individual, separated status bar items displaying percentage and mini progress bars side-by-side.
+- **Retina-Crisp Rendering**: Custom Core Graphics drawing system using integer-aligned coordinates to ensure pixel-perfect rendering on Retina displays.
+- **Intelligent Caching**: Built-in, main-thread-confined `MenuBarImageCache` that reuses `NSImage` instances unless telemetry percentages or system color themes (`isDarkMode`) change, keeping memory consumption extremely low.
+- **Multi-Threaded Telemetry**: All hardware queries run continuously on a dedicated background serial queue, dispatching only the final layout state to the main thread asynchronously for 100% stutter-free performance.
+- **Apple Silicon Optimized**: Native performance on M1/M2/M3 chips with zero external dependencies and an ultra-lightweight footprint.
 
 ## 🛠 Technical Implementation
 
-ThermalBar uses a multi-layered approach to fetch thermal data:
-1. **AppleSMC (Primary)**: Directly queries hardware keys via IOKit for the most accurate Performance Core and Battery temperatures.
-2. **HIDThermal (Secondary)**: Fallback to the macOS HID event system for supplementary sensor data.
-3. **IOBattery (Unified)**: Integrated battery health and state monitoring.
+ThermalBar uses a multi-layered approach to fetch hardware and system telemetry:
+1. **AppleSMC (Primary)**: Directly queries SMC hardware registers via IOKit for the most accurate Performance Core and Battery temperatures.
+2. **HIDThermal (Secondary)**: Fallback to the macOS HID event system (`IOHIDEventSystemClient`) for supplementary thermal sensor data.
+3. **UsageService (System Telemetry)**:
+   - **CPU**: Direct Mach kernel processor statistics (`host_processor_info`) with automatic VM deallocation.
+   - **RAM**: Mach virtual memory query (`host_statistics64` with `HOST_VM_INFO64`) tracking absolute active and compressed pages against system capacities.
+   - **GPU**: Live registration iterator mapping (`IOServiceGetMatchingServices`) querying "PerformanceStatistics" dictionaries via the accelerator subsystem.
 
 ## 🚀 Getting Started
 
