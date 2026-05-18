@@ -304,6 +304,58 @@ func createCombinedVerticalUsageMenuBarImage(cpu: Double?, ram: Double?, gpu: Do
     return image
 }
 
+private final class MenuBarImageCache {
+    static let shared = MenuBarImageCache()
+    
+    private var tempImageCache: [String: NSImage] = [:]
+    private var combinedUsageImageCache: [String: NSImage] = [:]
+    private var linearUsageImageCache: [String: NSImage] = [:]
+    
+    private var isDarkMode: Bool {
+        if let best = NSAppearance.currentDrawing().bestMatch(from: [.darkAqua, .aqua]) {
+            return best == .darkAqua
+        }
+        return false
+    }
+    
+    func getTempImage(items: [String], isVertical: Bool, showIcon: Bool) -> NSImage {
+        let key = "\(items.joined(separator: "-"))-\(isVertical)-\(showIcon)-\(isDarkMode)"
+        if let cached = tempImageCache[key] {
+            return cached
+        }
+        let newImg = createMenuBarImage(items: items, isVertical: isVertical, showIcon: showIcon)
+        if tempImageCache.count > 50 { tempImageCache.removeAll() }
+        tempImageCache[key] = newImg
+        return newImg
+    }
+    
+    func getCombinedUsageImage(cpu: Double?, ram: Double?, gpu: Double?) -> NSImage {
+        let cpuInt = cpu != nil ? Int(cpu!.rounded()) : -1
+        let ramInt = ram != nil ? Int(ram!.rounded()) : -1
+        let gpuInt = gpu != nil ? Int(gpu!.rounded()) : -1
+        let key = "\(cpuInt)-\(ramInt)-\(gpuInt)-\(isDarkMode)"
+        if let cached = combinedUsageImageCache[key] {
+            return cached
+        }
+        let newImg = createCombinedVerticalUsageMenuBarImage(cpu: cpu, ram: ram, gpu: gpu)
+        if combinedUsageImageCache.count > 50 { combinedUsageImageCache.removeAll() }
+        combinedUsageImageCache[key] = newImg
+        return newImg
+    }
+    
+    func getLinearUsageImage(label: String, value: Double) -> NSImage {
+        let valInt = Int(value.rounded())
+        let key = "\(label)-\(valInt)-\(isDarkMode)"
+        if let cached = linearUsageImageCache[key] {
+            return cached
+        }
+        let newImg = createLinearProgressMenuBarImage(label: label, value: value)
+        if linearUsageImageCache.count > 50 { linearUsageImageCache.removeAll() }
+        linearUsageImageCache[key] = newImg
+        return newImg
+    }
+}
+
 @main
 struct ThermalBarApp: App {
     @StateObject private var viewModel = ThermalViewModel()
@@ -337,7 +389,7 @@ struct ThermalBarApp: App {
                 return list
             }()
             
-            Image(nsImage: createMenuBarImage(items: items, isVertical: viewModel.menuBarTextOrder == "Vertical", showIcon: viewModel.showMenuBarIcon))
+            Image(nsImage: MenuBarImageCache.shared.getTempImage(items: items, isVertical: viewModel.menuBarTextOrder == "Vertical", showIcon: viewModel.showMenuBarIcon))
                 .id("\(items.joined(separator: "-"))-\(viewModel.menuBarTextOrder)-\(viewModel.showMenuBarIcon)")
         }
         .menuBarExtraStyle(.window)
@@ -354,7 +406,7 @@ struct ThermalBarApp: App {
             let gpuVal = viewModel.showGpuMenuBar ? (viewModel.gpuUsage?.usage ?? 0.0) : nil
             
             let cacheId = "combined-vertical-\(Int(cpuVal ?? -1))-\(Int(ramVal ?? -1))-\(Int(gpuVal ?? -1))"
-            Image(nsImage: createCombinedVerticalUsageMenuBarImage(cpu: cpuVal, ram: ramVal, gpu: gpuVal))
+            Image(nsImage: MenuBarImageCache.shared.getCombinedUsageImage(cpu: cpuVal, ram: ramVal, gpu: gpuVal))
                 .id(cacheId)
         }
         .menuBarExtraStyle(.window)
@@ -367,7 +419,7 @@ struct ThermalBarApp: App {
             DashboardView(viewModel: viewModel)
         } label: {
             let val = viewModel.cpuUsage?.usage ?? 0.0
-            Image(nsImage: createLinearProgressMenuBarImage(label: "CPU", value: val))
+            Image(nsImage: MenuBarImageCache.shared.getLinearUsageImage(label: "CPU", value: val))
                 .id("cpu-menubar-\(Int(val.rounded()))")
         }
         .menuBarExtraStyle(.window)
@@ -379,7 +431,7 @@ struct ThermalBarApp: App {
             DashboardView(viewModel: viewModel)
         } label: {
             let val = viewModel.memoryUsage?.usage ?? 0.0
-            Image(nsImage: createLinearProgressMenuBarImage(label: "RAM", value: val))
+            Image(nsImage: MenuBarImageCache.shared.getLinearUsageImage(label: "RAM", value: val))
                 .id("ram-menubar-\(Int(val.rounded()))")
         }
         .menuBarExtraStyle(.window)
@@ -391,7 +443,7 @@ struct ThermalBarApp: App {
             DashboardView(viewModel: viewModel)
         } label: {
             let val = viewModel.gpuUsage?.usage ?? 0.0
-            Image(nsImage: createLinearProgressMenuBarImage(label: "GPU", value: val))
+            Image(nsImage: MenuBarImageCache.shared.getLinearUsageImage(label: "GPU", value: val))
                 .id("gpu-menubar-\(Int(val.rounded()))")
         }
         .menuBarExtraStyle(.window)
