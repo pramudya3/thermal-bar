@@ -143,7 +143,9 @@ class ThermalViewModel: ObservableObject {
         sensorTimer = DispatchSource.makeTimerSource(queue: pollingQueue)
         sensorTimer?.schedule(deadline: .now(), repeating: refreshInterval)
         sensorTimer?.setEventHandler { [weak self] in
-            self?.updateSensors()
+            autoreleasepool {
+                self?.updateSensors()
+            }
         }
         sensorTimer?.resume()
     }
@@ -246,10 +248,18 @@ class ThermalViewModel: ObservableObject {
         }
     }
 
+    private var lastAlertTimes: [String: Date] = [:]
+
     private func checkAlerts() {
         let all = cpuReadings + gpuReadings + batteryReadings
+        let now = Date()
+        
         for r in all where r.temperature >= highTempThreshold {
-            notificationService.sendHighTempWarning(sensor: r.label, temperature: r.temperature)
+            let lastAlertTime = lastAlertTimes[r.label] ?? Date.distantPast
+            if now.timeIntervalSince(lastAlertTime) >= 300 {
+                notificationService.sendHighTempWarning(sensor: r.label, temperature: r.temperature)
+                lastAlertTimes[r.label] = now
+            }
         }
         let state = ProcessInfo.processInfo.thermalState
         if state != lastThermalState {

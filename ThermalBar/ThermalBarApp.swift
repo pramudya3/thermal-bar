@@ -53,39 +53,57 @@ func createMenuBarImage(items: [String], isVertical: Bool, iconName: String = "t
     let actualSpacing = showIcon ? spacing : 0
     let totalWidth = ceil(iconWidth + actualSpacing + textWidth)
     
-    let image = NSImage(size: NSSize(width: totalWidth, height: totalHeight), flipped: false) { rect in
-        guard let ctx = NSGraphicsContext.current else { return false }
-        
-        // Use high-quality antialiasing for sharp text on Retina displays
+    let scale: CGFloat = 2.0
+    let rep = NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: Int(totalWidth * scale),
+        pixelsHigh: Int(totalHeight * scale),
+        bitsPerSample: 8,
+        samplesPerPixel: 4,
+        hasAlpha: true,
+        isPlanar: false,
+        colorSpaceName: .deviceRGB,
+        bytesPerRow: 0,
+        bitsPerPixel: 0
+    )!
+    rep.size = NSSize(width: totalWidth, height: totalHeight)
+    
+    let context = NSGraphicsContext(bitmapImageRep: rep)
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = context
+    
+    if let ctx = context {
         ctx.imageInterpolation = .high
         ctx.shouldAntialias = true
-        
-        // Draw icon - centered for stability
-        if showIcon {
-            let iconRect = NSRect(x: 0, y: (totalHeight - iconHeight) / 2, width: iconWidth, height: iconHeight)
-            icon?.draw(in: iconRect)
-        }
-        
-        let textX = iconWidth + actualSpacing
-        
-        // Draw text
-        if isVertical && items.count >= 2 {
-            let str1 = NSAttributedString(string: items[0], attributes: attributes)
-            let str2 = NSAttributedString(string: items[1], attributes: attributes)
-            
-            // Pro Layout: Tightened for a "Full Bar" look like TG Pro
-            // str2: 1.0 to 10.0 | GAP: 2.0px | str1: 12.0 to 21.0
-            str1.draw(at: NSPoint(x: textX, y: 12.0))
-            str2.draw(at: NSPoint(x: textX, y: 0.0))
-        } else {
-            let text = items.count >= 2 ? items.joined(separator: " / ") : items[0]
-            let str = NSAttributedString(string: text, attributes: attributes)
-            let textY = (totalHeight - str.size().height) / 2
-            str.draw(at: NSPoint(x: textX, y: textY))
-        }
-        
-        return true
     }
+    
+    // Draw icon - centered for stability
+    if showIcon {
+        let iconRect = NSRect(x: 0, y: (totalHeight - iconHeight) / 2, width: iconWidth, height: iconHeight)
+        icon?.draw(in: iconRect)
+    }
+    
+    let textX = iconWidth + actualSpacing
+    
+    // Draw text
+    if isVertical && items.count >= 2 {
+        let str1 = NSAttributedString(string: items[0], attributes: attributes)
+        let str2 = NSAttributedString(string: items[1], attributes: attributes)
+        
+        // Pro Layout: Tightened for a "Full Bar" look like TG Pro
+        str1.draw(at: NSPoint(x: textX, y: 12.0))
+        str2.draw(at: NSPoint(x: textX, y: 0.0))
+    } else {
+        let text = items.count >= 2 ? items.joined(separator: " / ") : items[0]
+        let str = NSAttributedString(string: text, attributes: attributes)
+        let textY = (totalHeight - str.size().height) / 2
+        str.draw(at: NSPoint(x: textX, y: textY))
+    }
+    
+    NSGraphicsContext.restoreGraphicsState()
+    
+    let image = NSImage(size: NSSize(width: totalWidth, height: totalHeight))
+    image.addRepresentation(rep)
     
     // Crucial: This makes the image adapt to Light/Dark mode automatically
     image.isTemplate = true
@@ -118,65 +136,84 @@ func createLinearProgressMenuBarImage(label: String, value: Double) -> NSImage {
     // We add 1.0 point padding at start and end to avoid clipping
     let totalWidth = 2.0 + labelWidth + spacing + barWidth + spacing + valueWidth
     
-    let image = NSImage(size: NSSize(width: totalWidth, height: totalHeight), flipped: false) { rect in
-        guard let ctx = NSGraphicsContext.current else { return false }
-        
+    let scale: CGFloat = 2.0
+    let rep = NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: Int(totalWidth * scale),
+        pixelsHigh: Int(totalHeight * scale),
+        bitsPerSample: 8,
+        samplesPerPixel: 4,
+        hasAlpha: true,
+        isPlanar: false,
+        colorSpaceName: .deviceRGB,
+        bytesPerRow: 0,
+        bitsPerPixel: 0
+    )!
+    rep.size = NSSize(width: totalWidth, height: totalHeight)
+    
+    let context = NSGraphicsContext(bitmapImageRep: rep)
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = context
+    
+    if let ctx = context {
         ctx.imageInterpolation = .high
         ctx.shouldAntialias = true
-        
-        // 0. Detect Light / Dark Mode dynamically
-        var isDarkMode = false
-        if let best = NSAppearance.currentDrawing().bestMatch(from: [.darkAqua, .aqua]) {
-            isDarkMode = (best == .darkAqua)
-        }
-        
-        let textColor = isDarkMode ? NSColor.white : NSColor.black
-        let trackColor = isDarkMode ? NSColor.white.withAlphaComponent(0.2) : NSColor.black.withAlphaComponent(0.2)
-        
-        let fillColor: NSColor
-        if value < 60.0 {
-            fillColor = textColor
-        } else if value < 85.0 {
-            fillColor = NSColor.systemOrange
-        } else {
-            fillColor = NSColor.systemRed
-        }
-        
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: font,
-            .foregroundColor: textColor
-        ]
-        
-        let labelStr = NSAttributedString(string: label, attributes: attributes)
-        let valueStr = NSAttributedString(string: percentText, attributes: attributes)
-        
-        // 1. Draw Label Text on the left
-        let labelY = (totalHeight - labelStr.size().height) / 2.0
-        labelStr.draw(at: NSPoint(x: 1.0, y: labelY))
-        
-        // 2. Draw Progress Bar Background Track
-        let barX = 1.0 + labelWidth + spacing
-        let bgPath = NSBezierPath(roundedRect: NSRect(x: barX, y: barY, width: barWidth, height: barHeight), xRadius: 2.5, yRadius: 2.5)
-        trackColor.set()
-        bgPath.fill()
-        
-        // 3. Draw Progress Bar Fill
-        if value > 0.0 {
-            let fillPercent = min(max(CGFloat(value) / 100.0, 0.0), 1.0)
-            let fillWidth = max(fillPercent * barWidth, 2.0) // Keep at least 2px width if positive for visibility
-            let fillPath = NSBezierPath(roundedRect: NSRect(x: barX, y: barY, width: fillWidth, height: barHeight), xRadius: 2.5, yRadius: 2.5)
-            fillColor.set()
-            fillPath.fill()
-        }
-        
-        // 4. Draw Value Text on the right
-        let valueX = barX + barWidth + spacing
-        let valueY = (totalHeight - valueStr.size().height) / 2.0
-        valueStr.draw(at: NSPoint(x: valueX, y: valueY))
-        
-        return true
     }
     
+    // 0. Detect Light / Dark Mode dynamically
+    var isDarkMode = false
+    if let best = NSAppearance.currentDrawing().bestMatch(from: [.darkAqua, .aqua]) {
+        isDarkMode = (best == .darkAqua)
+    }
+    
+    let textColor = isDarkMode ? NSColor.white : NSColor.black
+    let trackColor = isDarkMode ? NSColor.white.withAlphaComponent(0.2) : NSColor.black.withAlphaComponent(0.2)
+    
+    let fillColor: NSColor
+    if value < 60.0 {
+        fillColor = textColor
+    } else if value < 85.0 {
+        fillColor = NSColor.systemOrange
+    } else {
+        fillColor = NSColor.systemRed
+    }
+    
+    let attributes: [NSAttributedString.Key: Any] = [
+        .font: font,
+        .foregroundColor: textColor
+    ]
+    
+    let labelStr = NSAttributedString(string: label, attributes: attributes)
+    let valueStr = NSAttributedString(string: percentText, attributes: attributes)
+    
+    // 1. Draw Label Text on the left
+    let labelY = (totalHeight - labelStr.size().height) / 2.0
+    labelStr.draw(at: NSPoint(x: 1.0, y: labelY))
+    
+    // 2. Draw Progress Bar Background Track
+    let barX = 1.0 + labelWidth + spacing
+    let bgPath = NSBezierPath(roundedRect: NSRect(x: barX, y: barY, width: barWidth, height: barHeight), xRadius: 2.5, yRadius: 2.5)
+    trackColor.set()
+    bgPath.fill()
+    
+    // 3. Draw Progress Bar Fill
+    if value > 0.0 {
+        let fillPercent = min(max(CGFloat(value) / 100.0, 0.0), 1.0)
+        let fillWidth = max(fillPercent * barWidth, 2.0) // Keep at least 2px width if positive for visibility
+        let fillPath = NSBezierPath(roundedRect: NSRect(x: barX, y: barY, width: fillWidth, height: barHeight), xRadius: 2.5, yRadius: 2.5)
+        fillColor.set()
+        fillPath.fill()
+    }
+    
+    // 4. Draw Value Text on the right
+    let valueX = barX + barWidth + spacing
+    let valueY = (totalHeight - valueStr.size().height) / 2.0
+    valueStr.draw(at: NSPoint(x: valueX, y: valueY))
+    
+    NSGraphicsContext.restoreGraphicsState()
+    
+    let image = NSImage(size: NSSize(width: totalWidth, height: totalHeight))
+    image.addRepresentation(rep)
     image.isTemplate = false
     return image
 }
@@ -231,75 +268,97 @@ func createCombinedVerticalUsageMenuBarImage(cpu: Double?, ram: Double?, gpu: Do
     
     let totalWidth = 2.0 + maxLabelWidth + 3.0 + barWidth + 3.0 + maxPctWidth + 2.0
     
-    let image = NSImage(size: NSSize(width: totalWidth, height: totalHeight), flipped: false) { rect in
-        guard let _ = NSGraphicsContext.current else { return false }
-        
-        // Detect theme
-        var isDarkMode = false
-        if let best = NSAppearance.currentDrawing().bestMatch(from: [.darkAqua, .aqua]) {
-            isDarkMode = (best == .darkAqua)
-        }
-        
-        let textColor = isDarkMode ? NSColor.white : NSColor.black
-        let trackColor = isDarkMode ? NSColor.white.withAlphaComponent(0.2) : NSColor.black.withAlphaComponent(0.2)
-        
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: font,
-            .foregroundColor: textColor
-        ]
-        
-        let rowHeight: CGFloat = totalHeight / CGFloat(count)
-        
-        for (index, metric) in activeMetrics.enumerated() {
-            // Compute Y position (vertical layout)
-            let yOffset = totalHeight - CGFloat(index + 1) * rowHeight + (rowHeight - fontSize) / 2.0 - 0.5
-            let barOffset: CGFloat
-            switch count {
-            case 1: barOffset = -1.0
-            case 2: barOffset = -0.5
-            default: barOffset = -0.3
-            }
-            let barY = totalHeight - CGFloat(index + 1) * rowHeight + (rowHeight - barHeight) / 2.0 + barOffset
-            
-            // 1. Draw Label text on the left
-            let labelStr = NSAttributedString(string: metric.label, attributes: attributes)
-            labelStr.draw(at: NSPoint(x: 2.0, y: yOffset))
-            
-            // 2. Draw Progress Bar
-            let barX = 2.0 + maxLabelWidth + 3.0
-            let radius: CGFloat = count == 1 ? 2.5 : 1.0
-            let bgPath = NSBezierPath(roundedRect: NSRect(x: barX, y: barY, width: barWidth, height: barHeight), xRadius: radius, yRadius: radius)
-            trackColor.set()
-            bgPath.fill()
-            
-            if metric.val > 0.0 {
-                let fillPercent = min(max(CGFloat(metric.val) / 100.0, 0.0), 1.0)
-                let fillWidth = max(fillPercent * barWidth, 1.0)
-                let fillPath = NSBezierPath(roundedRect: NSRect(x: barX, y: barY, width: fillWidth, height: barHeight), xRadius: radius, yRadius: radius)
-                
-                let fillColor: NSColor
-                if metric.val < 60.0 {
-                    fillColor = textColor
-                } else if metric.val < 85.0 {
-                    fillColor = NSColor.systemOrange
-                } else {
-                    fillColor = NSColor.systemRed
-                }
-                
-                fillColor.set()
-                fillPath.fill()
-            }
-            
-            // 3. Draw Percentage text on the right
-            let pctText = "\(Int(metric.val.rounded()))%"
-            let pctStr = NSAttributedString(string: pctText, attributes: attributes)
-            let pctX = barX + barWidth + 3.0
-            pctStr.draw(at: NSPoint(x: pctX, y: yOffset))
-        }
-        
-        return true
+    let scale: CGFloat = 2.0
+    let rep = NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: Int(totalWidth * scale),
+        pixelsHigh: Int(totalHeight * scale),
+        bitsPerSample: 8,
+        samplesPerPixel: 4,
+        hasAlpha: true,
+        isPlanar: false,
+        colorSpaceName: .deviceRGB,
+        bytesPerRow: 0,
+        bitsPerPixel: 0
+    )!
+    rep.size = NSSize(width: totalWidth, height: totalHeight)
+    
+    let context = NSGraphicsContext(bitmapImageRep: rep)
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = context
+    
+    if let ctx = context {
+        ctx.imageInterpolation = .high
+        ctx.shouldAntialias = true
     }
     
+    // Detect theme
+    var isDarkMode = false
+    if let best = NSAppearance.currentDrawing().bestMatch(from: [.darkAqua, .aqua]) {
+        isDarkMode = (best == .darkAqua)
+    }
+    
+    let textColor = isDarkMode ? NSColor.white : NSColor.black
+    let trackColor = isDarkMode ? NSColor.white.withAlphaComponent(0.2) : NSColor.black.withAlphaComponent(0.2)
+    
+    let attributes: [NSAttributedString.Key: Any] = [
+        .font: font,
+        .foregroundColor: textColor
+    ]
+    
+    let rowHeight: CGFloat = totalHeight / CGFloat(count)
+    
+    for (index, metric) in activeMetrics.enumerated() {
+        // Compute Y position (vertical layout)
+        let yOffset = totalHeight - CGFloat(index + 1) * rowHeight + (rowHeight - fontSize) / 2.0 - 0.5
+        let barOffset: CGFloat
+        switch count {
+        case 1: barOffset = -1.0
+        case 2: barOffset = -0.5
+        default: barOffset = -0.3
+        }
+        let barY = totalHeight - CGFloat(index + 1) * rowHeight + (rowHeight - barHeight) / 2.0 + barOffset
+        
+        // 1. Draw Label text on the left
+        let labelStr = NSAttributedString(string: metric.label, attributes: attributes)
+        labelStr.draw(at: NSPoint(x: 2.0, y: yOffset))
+        
+        // 2. Draw Progress Bar
+        let barX = 2.0 + maxLabelWidth + 3.0
+        let radius: CGFloat = count == 1 ? 2.5 : 1.0
+        let bgPath = NSBezierPath(roundedRect: NSRect(x: barX, y: barY, width: barWidth, height: barHeight), xRadius: radius, yRadius: radius)
+        trackColor.set()
+        bgPath.fill()
+        
+        if metric.val > 0.0 {
+            let fillPercent = min(max(CGFloat(metric.val) / 100.0, 0.0), 1.0)
+            let fillWidth = max(fillPercent * barWidth, 1.0)
+            let fillPath = NSBezierPath(roundedRect: NSRect(x: barX, y: barY, width: fillWidth, height: barHeight), xRadius: radius, yRadius: radius)
+            
+            let fillColor: NSColor
+            if metric.val < 60.0 {
+                fillColor = textColor
+            } else if metric.val < 85.0 {
+                fillColor = NSColor.systemOrange
+            } else {
+                fillColor = NSColor.systemRed
+            }
+            
+            fillColor.set()
+            fillPath.fill()
+        }
+        
+        // 3. Draw Percentage text on the right
+        let pctText = "\(Int(metric.val.rounded()))%"
+        let pctStr = NSAttributedString(string: pctText, attributes: attributes)
+        let pctX = barX + barWidth + 3.0
+        pctStr.draw(at: NSPoint(x: pctX, y: yOffset))
+    }
+    
+    NSGraphicsContext.restoreGraphicsState()
+    
+    let image = NSImage(size: NSSize(width: totalWidth, height: totalHeight))
+    image.addRepresentation(rep)
     image.isTemplate = false
     return image
 }

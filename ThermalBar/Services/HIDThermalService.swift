@@ -68,9 +68,13 @@ final class HIDThermalService {
         cacheSensorServices()
     }
 
+    private var servicesArray: CFArray?
+
     private func cacheSensorServices() {
         guard let svcsUnmanaged = copySvcsFn(client) else { return }
         let svcs = svcsUnmanaged.takeRetainedValue()
+        self.servicesArray = svcs // Keep elements retained
+        
         let count = CFArrayGetCount(svcs)
         
         for i in 0 ..< count {
