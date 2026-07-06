@@ -170,38 +170,9 @@ struct DashboardView: View {
                 .padding(.vertical, 10)
             }
             .frame(width: 350)
-            .background(
-                WindowAccessor { window in
-                    let currentId = window.windowNumber
-                    for w in NSApplication.shared.windows {
-                        if w.windowNumber != currentId {
-                            let className = String(describing: type(of: w))
-                            if w.title.isEmpty || className.contains("Status") || className.contains("Panel") {
-                                w.orderOut(nil)
-                            }
-                        }
-                    }
-                }
-            )
             .background(.regularMaterial)
         }
     }
-}
-
-struct WindowAccessor: NSViewRepresentable {
-    var onAccess: (NSWindow) -> Void
-    
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            if let window = view.window {
-                onAccess(window)
-            }
-        }
-        return view
-    }
-    
-    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 // ── Section Header ────────────────────────────────────────────────────────────

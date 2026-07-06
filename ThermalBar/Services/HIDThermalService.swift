@@ -1,5 +1,6 @@
 import Foundation
 import IOKit
+import os.log
 
 /// Reads real-time temperatures from the IOHIDEventSystem.
 /// Works on Apple Silicon (M1/M2/M3) without special entitlements or root.
@@ -37,11 +38,16 @@ final class HIDThermalService {
     static let batterySubstrings  = ["gas gauge battery", "Battery"]
     static let socSubstrings      = ["PMGR SOC Die"]
 
+    private static let log = OSLog(subsystem: "com.antigravity.ThermalBar", category: "HIDThermal")
+
     // MARK: - Init
     init?() {
         guard let lib = dlopen(
             "/System/Library/Frameworks/IOKit.framework/Versions/A/IOKit", RTLD_NOW)
-        else { return nil }
+        else {
+            os_log("Failed to dlopen IOKit framework", log: Self.log, type: .error)
+            return nil
+        }
 
         guard
             let sym1 = dlsym(lib, "IOHIDEventSystemClientCreate"),
@@ -50,7 +56,10 @@ final class HIDThermalService {
             let sym4 = dlsym(lib, "IOHIDServiceClientCopyEvent"),
             let sym5 = dlsym(lib, "IOHIDEventGetFloatValue"),
             let sym6 = dlsym(lib, "IOHIDServiceClientCopyProperty")
-        else { return nil }
+        else {
+            os_log("Failed to resolve IOHID symbols from IOKit", log: Self.log, type: .error)
+            return nil
+        }
 
         let createFn = unsafeBitCast(sym1, to: CreateFn.self)
         setMatchFn   = unsafeBitCast(sym2, to: SetMatchFn.self)
@@ -59,7 +68,10 @@ final class HIDThermalService {
         getFloatFn   = unsafeBitCast(sym5, to: GetFloatFn.self)
         copyPropFn   = unsafeBitCast(sym6, to: CopyPropFn.self)
 
-        guard let c = createFn(kCFAllocatorDefault) else { return nil }
+        guard let c = createFn(kCFAllocatorDefault) else {
+            os_log("IOHIDEventSystemClientCreate returned nil", log: Self.log, type: .error)
+            return nil
+        }
         client = c
 
         let match: NSDictionary = ["PrimaryUsagePage": 0xff00, "PrimaryUsage": 0x0005]
@@ -71,6 +83,9 @@ final class HIDThermalService {
     private var servicesArray: CFArray?
 
     private func cacheSensorServices() {
+        // Prevent re-entry — cachedSensors holds OpaquePointers into the
+        // CFArray below; calling this again would orphan them.
+        guard cachedSensors.isEmpty else { return }
         guard let svcsUnmanaged = copySvcsFn(client) else { return }
         let svcs = svcsUnmanaged.takeRetainedValue()
         self.servicesArray = svcs // Keep elements retained
@@ -91,6 +106,7 @@ final class HIDThermalService {
             
             cachedSensors.append(CachedSensor(service: svc, name: name))
         }
+        cachedSensors.sort { $0.name < $1.name }
     }
 
     // MARK: - Public API

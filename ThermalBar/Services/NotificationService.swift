@@ -4,11 +4,11 @@ import UserNotifications
 class NotificationService {
     static let shared = NotificationService()
     
-    private init() {
-        requestAuthorization()
-    }
+    private var hasRequestedAuth = false
     
-    func requestAuthorization() {
+    private func ensureAuthorized() {
+        guard !hasRequestedAuth else { return }
+        hasRequestedAuth = true
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
             if let error = error {
                 print("Notification authorization error: \(error)")
@@ -17,6 +17,7 @@ class NotificationService {
     }
     
     func sendHighTempWarning(sensor: String, temperature: Double) {
+        ensureAuthorized()
         let content = UNMutableNotificationContent()
         content.title = "High Temperature Warning"
         content.body = "\(sensor) has reached \(String(format: "%.1f", temperature))°C."
@@ -32,6 +33,7 @@ class NotificationService {
     }
     
     func sendThrottlingAlert() {
+        ensureAuthorized()
         let content = UNMutableNotificationContent()
         content.title = "System Throttling"
         content.body = "Thermal throttling has been detected. System performance may be reduced."

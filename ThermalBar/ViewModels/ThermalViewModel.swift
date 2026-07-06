@@ -19,6 +19,23 @@ struct SensorReading: Identifiable {
 }
 
 class ThermalViewModel: ObservableObject {
+    private enum UserDefaultsKey {
+        static let refreshInterval    = "refreshInterval"
+        static let highTempThreshold  = "highTempThreshold"
+        static let showFirstTemp      = "showFirstTemp"
+        static let firstTempType      = "firstTempType"
+        static let showSecondTemp     = "showSecondTemp"
+        static let secondTempType     = "secondTempType"
+        static let menuBarTextOrder   = "menuBarTextOrder"
+        static let showMenuBarIcon    = "showMenuBarIcon"
+        static let showCpuMenuBar     = "showCpuMenuBar"
+        static let showRamMenuBar     = "showRamMenuBar"
+        static let showGpuMenuBar     = "showGpuMenuBar"
+        static let systemUsageLayout  = "systemUsageLayout"
+        static let temperatureLayout  = "temperatureLayout"
+        static let notificationsEnabled = "notificationsEnabled"
+    }
+
     // Menu bar display
     @Published var cpuTemp: Double = 0
     @Published var batteryTemp: Double = 0
@@ -35,69 +52,74 @@ class ThermalViewModel: ObservableObject {
     // Preferences manually synced with UserDefaults to avoid AppStorage memory/offset compiler bugs
     @Published var refreshInterval: Double {
         didSet {
-            UserDefaults.standard.set(refreshInterval, forKey: "refreshInterval")
+            UserDefaults.standard.set(refreshInterval, forKey: UserDefaultsKey.refreshInterval)
         }
     }
     @Published var highTempThreshold: Double {
         didSet {
-            UserDefaults.standard.set(highTempThreshold, forKey: "highTempThreshold")
+            UserDefaults.standard.set(highTempThreshold, forKey: UserDefaultsKey.highTempThreshold)
         }
     }
 
     // Menu Bar Settings
     @Published var showFirstTemp: Bool {
         didSet {
-            UserDefaults.standard.set(showFirstTemp, forKey: "showFirstTemp")
+            UserDefaults.standard.set(showFirstTemp, forKey: UserDefaultsKey.showFirstTemp)
         }
     }
     @Published var firstTempType: String {
         didSet {
-            UserDefaults.standard.set(firstTempType, forKey: "firstTempType")
+            UserDefaults.standard.set(firstTempType, forKey: UserDefaultsKey.firstTempType)
         }
     }
     @Published var showSecondTemp: Bool {
         didSet {
-            UserDefaults.standard.set(showSecondTemp, forKey: "showSecondTemp")
+            UserDefaults.standard.set(showSecondTemp, forKey: UserDefaultsKey.showSecondTemp)
         }
     }
     @Published var secondTempType: String {
         didSet {
-            UserDefaults.standard.set(secondTempType, forKey: "secondTempType")
+            UserDefaults.standard.set(secondTempType, forKey: UserDefaultsKey.secondTempType)
         }
     }
     @Published var menuBarTextOrder: String {
         didSet {
-            UserDefaults.standard.set(menuBarTextOrder, forKey: "menuBarTextOrder")
+            UserDefaults.standard.set(menuBarTextOrder, forKey: UserDefaultsKey.menuBarTextOrder)
         }
     }
     @Published var showMenuBarIcon: Bool {
         didSet {
-            UserDefaults.standard.set(showMenuBarIcon, forKey: "showMenuBarIcon")
+            UserDefaults.standard.set(showMenuBarIcon, forKey: UserDefaultsKey.showMenuBarIcon)
         }
     }
     @Published var showCpuMenuBar: Bool {
         didSet {
-            UserDefaults.standard.set(showCpuMenuBar, forKey: "showCpuMenuBar")
+            UserDefaults.standard.set(showCpuMenuBar, forKey: UserDefaultsKey.showCpuMenuBar)
         }
     }
     @Published var showRamMenuBar: Bool {
         didSet {
-            UserDefaults.standard.set(showRamMenuBar, forKey: "showRamMenuBar")
+            UserDefaults.standard.set(showRamMenuBar, forKey: UserDefaultsKey.showRamMenuBar)
         }
     }
     @Published var showGpuMenuBar: Bool {
         didSet {
-            UserDefaults.standard.set(showGpuMenuBar, forKey: "showGpuMenuBar")
+            UserDefaults.standard.set(showGpuMenuBar, forKey: UserDefaultsKey.showGpuMenuBar)
         }
     }
     @Published var systemUsageLayout: String {
         didSet {
-            UserDefaults.standard.set(systemUsageLayout, forKey: "systemUsageLayout")
+            UserDefaults.standard.set(systemUsageLayout, forKey: UserDefaultsKey.systemUsageLayout)
         }
     }
     @Published var temperatureLayout: String {
         didSet {
-            UserDefaults.standard.set(temperatureLayout, forKey: "temperatureLayout")
+            UserDefaults.standard.set(temperatureLayout, forKey: UserDefaultsKey.temperatureLayout)
+        }
+    }
+    @Published var notificationsEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(notificationsEnabled, forKey: UserDefaultsKey.notificationsEnabled)
         }
     }
 
@@ -107,34 +129,34 @@ class ThermalViewModel: ObservableObject {
     private let smcService = SMCService()
     private let usageService = UsageService()
     private let notificationService = NotificationService.shared
-    private var timer: Timer?
     private var lastThermalState: ProcessInfo.ThermalState = .nominal
 
     init() {
         let ud = UserDefaults.standard
-        self.refreshInterval = ud.object(forKey: "refreshInterval") == nil ? 0.5 : ud.double(forKey: "refreshInterval")
-        self.highTempThreshold = ud.object(forKey: "highTempThreshold") == nil ? 85.0 : ud.double(forKey: "highTempThreshold")
+        self.refreshInterval = ud.object(forKey: UserDefaultsKey.refreshInterval) == nil ? 0.5 : ud.double(forKey: UserDefaultsKey.refreshInterval)
+        self.highTempThreshold = ud.object(forKey: UserDefaultsKey.highTempThreshold) == nil ? 85.0 : ud.double(forKey: UserDefaultsKey.highTempThreshold)
         
-        self.showFirstTemp = ud.object(forKey: "showFirstTemp") == nil ? true : ud.bool(forKey: "showFirstTemp")
-        self.firstTempType = ud.string(forKey: "firstTempType") ?? "Average CPU"
-        self.showSecondTemp = ud.object(forKey: "showSecondTemp") == nil ? true : ud.bool(forKey: "showSecondTemp")
-        self.secondTempType = ud.string(forKey: "secondTempType") ?? "Battery"
-        self.menuBarTextOrder = ud.string(forKey: "menuBarTextOrder") ?? "Vertical"
-        self.showMenuBarIcon = true
+        self.showFirstTemp = ud.object(forKey: UserDefaultsKey.showFirstTemp) == nil ? true : ud.bool(forKey: UserDefaultsKey.showFirstTemp)
+        self.firstTempType = ud.string(forKey: UserDefaultsKey.firstTempType) ?? "Average CPU"
+        self.showSecondTemp = ud.object(forKey: UserDefaultsKey.showSecondTemp) == nil ? true : ud.bool(forKey: UserDefaultsKey.showSecondTemp)
+        self.secondTempType = ud.string(forKey: UserDefaultsKey.secondTempType) ?? "Battery"
+        self.menuBarTextOrder = ud.string(forKey: UserDefaultsKey.menuBarTextOrder) ?? "Vertical"
+        self.showMenuBarIcon = ud.object(forKey: UserDefaultsKey.showMenuBarIcon) == nil ? true : ud.bool(forKey: UserDefaultsKey.showMenuBarIcon)
         
-        self.showCpuMenuBar = ud.bool(forKey: "showCpuMenuBar")
-        self.showRamMenuBar = ud.bool(forKey: "showRamMenuBar")
-        self.showGpuMenuBar = ud.bool(forKey: "showGpuMenuBar")
+        self.showCpuMenuBar = ud.bool(forKey: UserDefaultsKey.showCpuMenuBar)
+        self.showRamMenuBar = ud.bool(forKey: UserDefaultsKey.showRamMenuBar)
+        self.showGpuMenuBar = ud.bool(forKey: UserDefaultsKey.showGpuMenuBar)
         
-        self.systemUsageLayout = ud.string(forKey: "systemUsageLayout") ?? "Vertical"
-        self.temperatureLayout = ud.string(forKey: "temperatureLayout") ?? "Vertical"
+        self.systemUsageLayout = ud.string(forKey: UserDefaultsKey.systemUsageLayout) ?? "Vertical"
+        self.temperatureLayout = ud.string(forKey: UserDefaultsKey.temperatureLayout) ?? "Vertical"
+        self.notificationsEnabled = ud.object(forKey: UserDefaultsKey.notificationsEnabled) == nil ? true : ud.bool(forKey: UserDefaultsKey.notificationsEnabled)
         
         updateSensors()
         startPolling()
         setupWakeNotification()
     }
 
-    private let pollingQueue = DispatchQueue(label: "com.antigravity.ThermalBar.polling", qos: .userInitiated)
+    private let pollingQueue = DispatchQueue(label: "com.antigravity.ThermalBar.polling", qos: .utility)
     private var sensorTimer: DispatchSourceTimer?
 
     func startPolling() {

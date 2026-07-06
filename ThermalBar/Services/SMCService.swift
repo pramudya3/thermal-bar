@@ -63,6 +63,9 @@ class SMCService {
 
     // SMC struct matching exact C layout from Apple's PowerManagement source.
     // Total size must be 80 bytes for IOConnectCallStructMethod to succeed.
+    // A compile‑time check ensures we stay in sync with the kernel ABI.
+    private static let smcStructSizeExpected = 80
+
     struct SMCVersion {
         var major: UInt8 = 0
         var minor: UInt8 = 0
@@ -104,6 +107,8 @@ class SMCService {
     } // TOTAL: 80 bytes ✓
 
     init() {
+        assert(MemoryLayout<SMCParamStruct>.stride == Self.smcStructSizeExpected,
+               "SMCParamStruct size mismatch: got \(MemoryLayout<SMCParamStruct>.stride), expected \(Self.smcStructSizeExpected)")
         _ = open()
     }
 
@@ -124,20 +129,6 @@ class SMCService {
             IOServiceClose(connection)
             connection = 0
         }
-    }
-
-    /// Reads all sensors from a key-label list and returns those that respond with a valid temp.
-    func readSensors(from keyLabels: [(key: String, label: String)]) -> [(label: String, temperature: Double)] {
-        var results: [(label: String, temperature: Double)] = []
-        for entry in keyLabels {
-            if let temp = readKey(entry.key), temp > 1.0 {
-                // Deduplicate by label but allow multiple entries per label type
-                let uniqueLabel = entry.label + "_\(results.count)"
-                _ = uniqueLabel
-                results.append((label: entry.label, temperature: temp))
-            }
-        }
-        return results
     }
 
     /// Reads a single temp value for the first valid key in the list.
@@ -213,23 +204,23 @@ class SMCService {
                              UInt8((type >> 8) & 0xFF),
                              UInt8(type & 0xFF))
 
-        let byteArray = Mirror(reflecting: bytes).children.map { $0.value as! UInt8 }
-
-        if typeStr == "sp78" && size == 2 {
-            let raw = Int16(byteArray[0]) << 8 | Int16(byteArray[1])
-            let val = Double(raw) / 256.0
-            return (val > 0 && val < 150) ? val : nil
-        } else if typeStr == "flt " && size == 4 {
-            var f: Float = 0
-            memcpy(&f, byteArray, 4)
-            let val = Double(f)
-            return (val > 0 && val < 150) ? val : nil
-        } else if typeStr == "fpe2" && size == 2 {
-            let raw = UInt16(byteArray[0]) << 8 | UInt16(byteArray[1])
-            let val = Double(raw) / 4.0
-            return (val > 0 && val < 150) ? val : nil
+        return withUnsafeBytes(of: bytes) { raw in
+            let ptr = raw.baseAddress!.assumingMemoryBound(to: UInt8.self)
+            if typeStr == "sp78" && size == 2 {
+                let raw = Int16(ptr[0]) << 8 | Int16(ptr[1])
+                let val = Double(raw) / 256.0
+                return (val > 0 && val < 150) ? val : nil
+            } else if typeStr == "flt " && size == 4 {
+                var f: Float = 0
+                memcpy(&f, ptr, 4)
+                let val = Double(f)
+                return (val > 0 && val < 150) ? val : nil
+            } else if typeStr == "fpe2" && size == 2 {
+                let raw = UInt16(ptr[0]) << 8 | UInt16(ptr[1])
+                let val = Double(raw) / 4.0
+                return (val > 0 && val < 150) ? val : nil
+            }
+            return nil
         }
-
-        return nil
     }
 }

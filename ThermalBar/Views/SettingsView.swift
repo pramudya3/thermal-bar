@@ -6,7 +6,7 @@ struct SettingsView: View {
     @Binding var isPresented: Bool
     @State private var launchAtLogin = false
     
-    let intervals = [1.0, 2.0, 5.0, 10.0]
+    let intervals = [0.5, 1.0, 2.0, 5.0, 10.0]
     let metricTypes = ["Average CPU", "GPU", "Battery", "CPU Usage", "GPU Usage", "RAM Usage"]
     
     var body: some View {
@@ -67,6 +67,8 @@ struct SettingsView: View {
                             .pickerStyle(.segmented)
                         }
                     }
+
+                    Toggle("Show Menu Bar Icon", isOn: $viewModel.showMenuBarIcon)
                 }
                 .padding(.leading, 8)
             }
@@ -109,17 +111,43 @@ struct SettingsView: View {
                 
                 Picker("", selection: $viewModel.refreshInterval) {
                     ForEach(intervals, id: \.self) { interval in
-                        Text("\(Int(interval))s").tag(interval)
+                        Text(interval == 0.5 ? "0.5s" : "\(Int(interval))s").tag(interval)
                     }
                 }
                 .labelsHidden()
-                .pickerStyle(.segmented)
+                .pickerStyle(.menu)
                 .onChange(of: viewModel.refreshInterval) { _, _ in
                     viewModel.startPolling()
                 }
                 .padding(.leading, 8)
             }
             
+            Divider()
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Temperature Alert Threshold")
+                    .font(.headline)
+                    .foregroundColor(.secondary)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("Enable Temperature Alerts", isOn: $viewModel.notificationsEnabled)
+
+                    HStack {
+                        Text("Notify when any sensor exceeds")
+                            .font(.system(size: 12))
+                        Text("\(Int(viewModel.highTempThreshold))°C")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(viewModel.highTempThreshold >= 80 ? .red : .orange)
+                    }
+                    .disabled(!viewModel.notificationsEnabled)
+
+                    Slider(value: $viewModel.highTempThreshold, in: 60...100, step: 5)
+                        .padding(.trailing, 8)
+                        .disabled(!viewModel.notificationsEnabled)
+                }
+                .padding(.leading, 8)
+            }
+
             Toggle("Start at Login", isOn: $launchAtLogin)
                 .onChange(of: launchAtLogin) { _, newValue in
                     toggleLaunchAtLogin(newValue)
